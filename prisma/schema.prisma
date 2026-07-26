@@ -1,0 +1,329 @@
+// This is your Prisma schema file
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  name                  String
+  password              String
+  role                  Role      @default(STUDENT)
+  department            String?
+  enrollmentNumber      String?   @unique
+  phoneNumber           String?
+  profileImage          String?
+  isActive              Boolean   @default(true)
+  lastLogin             DateTime?
+  loginAttempts         Int       @default(0)
+  lockedUntil           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  studentExams          StudentExam[]
+  examResponses         ExamResponse[]
+  proctorSessions       ProctorSession[]
+  cheatingAlerts        CheatingAlert[]
+  auditLogs             AuditLog[]
+  notificationsSent     Notification[] @relation("NotificationSender")
+  notificationsReceived Notification[] @relation("NotificationReceiver")
+
+  @@index([email])
+  @@index([role])
+}
+
+model Exam {
+  id                    String    @id @default(cuid())
+  title                 String
+  description           String?   @db.LongText
+  subject               String
+  totalMarks            Float
+  duration              Int       // in minutes
+  passingMarks          Float
+  difficultyLevel       DifficultyLevel
+  examType              ExamType
+  startTime             DateTime
+  endTime               DateTime
+  numberOfQuestions     Int
+  createdByTeacherId    String
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  isPublished           Boolean   @default(false)
+  allowNegativeMarking  Boolean   @default(false)
+  negativeMarkingFactor Float?
+  showCorrectAnswers    Boolean   @default(false)
+  showAnswerAtEnd       Boolean   @default(false)
+  randomizeQuestions    Boolean   @default(true)
+  randomizeOptions      Boolean   @default(true)
+  requiresProctoring    Boolean   @default(false)
+  documentUrl           String?   // Vercel Blob URL
+
+  // Relations
+  questions             Question[]
+  studentExams          StudentExam[]
+  results               Result[]
+  proctorSessions       ProctorSession[]
+  cheatingAlerts        CheatingAlert[]
+
+  @@index([subject])
+  @@index([startTime])
+  @@index([createdByTeacherId])
+}
+
+model Question {
+  id                    String    @id @default(cuid())
+  examId                String
+  exam                  Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionText          String    @db.LongText
+  questionType          QuestionType
+  marks                 Float
+  difficulty            DifficultyLevel
+  imageUrl              String?   // Vercel Blob URL for question images
+  videoUrl              String?   // Vercel Blob URL for video questions
+  explanation           String?   @db.LongText
+  order                 Int
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  options               QuestionOption[]
+  responses             ExamResponse[]
+
+  @@index([examId])
+  @@index([questionType])
+}
+
+model QuestionOption {
+  id                    String    @id @default(cuid())
+  questionId            String
+  question              Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionText            String    @db.LongText
+  optionImageUrl        String?   // Vercel Blob URL
+  isCorrect             Boolean
+  order                 Int
+  createdAt             DateTime  @default(now())
+
+  @@index([questionId])
+}
+
+model StudentExam {
+  id                    String    @id @default(cuid())
+  studentId             String
+  student               User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  examId                String
+  exam                  Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  startedAt             DateTime?
+  submittedAt           DateTime?
+  status                ExamStatus @default(NOT_STARTED)
+  totalTimeSpent        Int?      // in seconds
+  lastActivityAt        DateTime?
+  ipAddress             String?
+  deviceInfo            String?   // User agent string
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  responses             ExamResponse[]
+  result                Result?
+
+  @@unique([studentId, examId])
+  @@index([studentId])
+  @@index([examId])
+  @@index([status])
+}
+
+model ExamResponse {
+  id                    String    @id @default(cuid())
+  studentExamId         String
+  studentExam           StudentExam @relation(fields: [studentExamId], references: [id], onDelete: Cascade)
+  questionId            String
+  question              Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selectedOptionIds     String    // JSON array of selected option IDs
+  answerText            String?   @db.LongText // For descriptive/essay questions
+  isCorrect             Boolean?
+  marksObtained         Float?
+  timeSpent             Int       // in seconds
+  flaggedForReview      Boolean   @default(false)
+  answeredAt            DateTime
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([studentExamId])
+  @@index([questionId])
+  @@index([userId])
+}
+
+model Result {
+  id                    String    @id @default(cuid())
+  studentExamId         String    @unique
+  studentExam           StudentExam @relation(fields: [studentExamId], references: [id], onDelete: Cascade)
+  examId                String
+  exam                  Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId             String
+  totalMarks            Float
+  marksObtained         Float
+  percentage            Float
+  grade                 String?
+  isPassed              Boolean
+  totalQuestionsAttempted Int
+  totalQuestionsCorrect Int
+  totalTimeSpent        Int     // in seconds
+  resultDate            DateTime  @default(now())
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([examId])
+  @@index([studentId])
+  @@index([isPassed])
+}
+
+model ProctorSession {
+  id                    String    @id @default(cuid())
+  examId                String
+  exam                  Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId             String
+  student               User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionStartTime      DateTime
+  sessionEndTime        DateTime?
+  totalCheckIns         Int       @default(0)
+  webcamStatus          String    @default("PENDING") // PENDING, ACTIVE, FAILED
+  lastWebcamCheck       DateTime?
+  suspiciousActivities  Int       @default(0)
+  screenshotCount       Int       @default(0)
+  lastScreenshotUrl     String?   // Vercel Blob URL
+  proctorNotes          String?   @db.LongText
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  cheatingAlerts        CheatingAlert[]
+
+  @@index([examId])
+  @@index([studentId])
+}
+
+model CheatingAlert {
+  id                    String    @id @default(cuid())
+  examId                String
+  exam                  Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId             String
+  student               User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  proctorSessionId      String
+  proctorSession        ProctorSession @relation(fields: [proctorSessionId], references: [id], onDelete: Cascade)
+  alertType             AlertType
+  severity              AlertSeverity
+  description           String    @db.LongText
+  detectionMethod       String    // e.g., "AI_FACE_DETECTION", "MULTIPLE_FACES", "WEBCAM_DISABLED", "TAB_SWITCH"
+  aiConfidenceScore     Float?    // 0-100
+  evidenceUrl           String?   // Vercel Blob URL for screenshot/video
+  isReviewed            Boolean   @default(false)
+  reviewedBy            String?
+  reviewedAt            DateTime?
+  reviewNotes           String?   @db.LongText
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([examId])
+  @@index([studentId])
+  @@index([alertType])
+}
+
+model AuditLog {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action                String
+  resource              String
+  resourceId            String?
+  changes               String?   @db.LongText // JSON of what changed
+  ipAddress             String?
+  userAgent             String?
+  status                String    // SUCCESS, FAILURE
+  errorMessage          String?
+  createdAt             DateTime  @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Notification {
+  id                    String    @id @default(cuid())
+  senderId              String
+  sender                User      @relation("NotificationSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId            String
+  receiver              User      @relation("NotificationReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  title                 String
+  message               String    @db.LongText
+  type                  String    // EXAM_SCHEDULED, EXAM_REMINDER, RESULT_PUBLISHED, ALERT
+  examId                String?
+  isRead                Boolean   @default(false)
+  readAt                DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([receiverId])
+  @@index([isRead])
+}
+
+// Enums
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum ExamStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  EVALUATED
+  FAILED_VERIFICATION
+}
+
+enum ExamType {
+  MCQ
+  DESCRIPTIVE
+  MIXED
+  CODE_BASED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  DESCRIPTIVE
+  CODE
+  MATCH_THE_FOLLOWING
+  TRUE_FALSE
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AlertType {
+  MULTIPLE_FACES
+  FACE_NOT_DETECTED
+  WEBCAM_DISABLED
+  TAB_SWITCH
+  SUSPICIOUS_BEHAVIOR
+  AI_DETECTED_CHEATING
+  UNUSUAL_PATTERN
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
