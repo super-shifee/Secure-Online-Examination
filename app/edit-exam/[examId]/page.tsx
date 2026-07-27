@@ -534,16 +534,16 @@ export default function EditExamPage() {
             </div>
 
             {/* Save Button */}
-            <div className="flex gap-4">
+            <div className="flex gap-3 pt-6 border-t">
               <Button
                 onClick={handleSaveExam}
                 disabled={isSaving}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                {isSaving ? 'Saving...' : 'Save & Publish Exam'}
               </Button>
               <Link href="/teacher-dashboard" className="flex-1">
-                <Button variant="outline" className="w-full" disabled={isSaving}>
+                <Button variant="outline" className="w-full font-semibold py-2.5 rounded-lg" disabled={isSaving}>
                   Cancel
                 </Button>
               </Link>
