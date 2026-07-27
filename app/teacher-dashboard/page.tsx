@@ -6,13 +6,29 @@ import { useAuth } from '@/lib/authContext';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 
+interface Question {
+  id: string;
+  type: 'MCQ' | 'DESCRIPTIVE' | 'CODE' | 'MATCH';
+  text: string;
+  options?: string[];
+  correctAnswer?: string | number;
+  marks: number;
+}
+
 interface Exam {
   id: string;
   title: string;
   description: string;
   duration: number;
-  totalQuestions: number;
+  totalMarks: number;
+  passingMarks: number;
+  department: string;
+  course: string;
+  questions: Question[];
+  createdBy: string;
   createdAt: string;
+  status: string;
+  totalQuestions?: number;
   totalStudents?: number;
   completedStudents?: number;
   averageScore?: number;
@@ -25,54 +41,37 @@ export default function TeacherDashboard() {
   const [loadingExams, setLoadingExams] = useState(true);
   const [activeTab, setActiveTab] = useState<'exams' | 'results' | 'analytics'>('exams');
 
-  // Mock exams data
-  const mockExams: Exam[] = [
-    {
-      id: '1',
-      title: 'JavaScript Fundamentals',
-      description: 'Test your knowledge on JS basics',
-      duration: 60,
-      totalQuestions: 20,
-      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      totalStudents: 45,
-      completedStudents: 38,
-      averageScore: 78,
-    },
-    {
-      id: '2',
-      title: 'React & State Management',
-      description: 'Advanced React concepts',
-      duration: 90,
-      totalQuestions: 30,
-      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      totalStudents: 42,
-      completedStudents: 15,
-      averageScore: 82,
-    },
-    {
-      id: '3',
-      title: 'Database Design',
-      description: 'SQL and NoSQL databases',
-      duration: 75,
-      totalQuestions: 25,
-      createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      totalStudents: 38,
-      completedStudents: 5,
-      averageScore: 71,
-    },
-  ];
-
   useEffect(() => {
     if (!isLoading && (!user || user.role !== 'TEACHER')) {
       router.push('/login');
       return;
     }
 
-    // Simulate fetching exams
-    setTimeout(() => {
-      setExams(mockExams);
-      setLoadingExams(false);
-    }, 500);
+    // Load exams from localStorage
+    const loadExams = () => {
+      try {
+        const storedExams = localStorage.getItem('exams');
+        const examsList = storedExams ? JSON.parse(storedExams) : [];
+        
+        // Map stored exams to display format with mock student data
+        const formattedExams = examsList.map((exam: Exam) => ({
+          ...exam,
+          totalQuestions: exam.questions?.length || 0,
+          totalStudents: Math.floor(Math.random() * 50) + 10,
+          completedStudents: Math.floor(Math.random() * 30) + 5,
+          averageScore: Math.floor(Math.random() * 40) + 60,
+        }));
+        
+        setExams(formattedExams);
+      } catch (error) {
+        console.error('[v0] Error loading exams:', error);
+        setExams([]);
+      } finally {
+        setLoadingExams(false);
+      }
+    };
+
+    loadExams();
   }, [user, isLoading, router]);
 
   const handleLogout = async () => {
