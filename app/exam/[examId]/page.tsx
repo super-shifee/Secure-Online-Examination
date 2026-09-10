@@ -95,10 +95,10 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
               : {
                   ...option,
                   id: option.id || `question-${questionIndex}-option-${optionIndex}`,
-                  optionText: option.optionText ?? option.text ?? option.label ?? '',
+                  optionText: option.optionText ?? option.text ?? option.value ?? option.content ?? '',
                   order: option.order ?? optionIndex,
                 },
-          ),
+          ).sort((first: { order: number }, second: { order: number }) => first.order - second.order),
         })),
         randomizeQuestions: foundExam.randomizeQuestions || false,
         requiresProctoring: foundExam.requiresProctoring || false
@@ -252,10 +252,10 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
 
               {/* Options */}
               <div className="space-y-3 mb-8">
-                {currentQuestion.options?.map((option) => (
+                {currentQuestion.options?.map((option, optionIndex) => (
                   <label
                     key={option.id}
-                    className="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition"
+                    className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition"
                   >
                     <input
                       type="checkbox"
@@ -263,7 +263,10 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
                       onChange={() => handleSelectOption(currentQuestion.id, option.id)}
                       className="w-4 h-4 text-blue-600 cursor-pointer"
                     />
-                    <span className="ml-3 text-gray-700">{option.optionText}</span>
+                    <span className="font-semibold text-gray-900" aria-hidden="true">
+                      {String.fromCharCode(65 + optionIndex)})
+                    </span>
+                    <span className="text-gray-700">{option.optionText}</span>
                   </label>
                 ))}
               </div>
