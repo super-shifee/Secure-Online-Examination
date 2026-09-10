@@ -81,7 +81,23 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
         title: foundExam.title,
         duration: foundExam.duration,
         totalMarks: foundExam.totalMarks,
-        questions: foundExam.questions || [],
+        questions: (foundExam.questions || []).map((question: any, questionIndex: number) => ({
+          ...question,
+          options: (question.options || []).map((option: any, optionIndex: number) =>
+            typeof option === 'string'
+              ? {
+                  id: `${question.id || questionIndex}-option-${optionIndex}`,
+                  optionText: option,
+                  order: optionIndex,
+                }
+              : {
+                  ...option,
+                  id: option.id || `${question.id || questionIndex}-option-${optionIndex}`,
+                  optionText: option.optionText ?? option.text ?? '',
+                  order: option.order ?? optionIndex,
+                },
+          ),
+        })),
         randomizeQuestions: foundExam.randomizeQuestions || false,
         requiresProctoring: foundExam.requiresProctoring || false
       };
