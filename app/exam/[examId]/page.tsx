@@ -83,17 +83,19 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
         totalMarks: foundExam.totalMarks,
         questions: (foundExam.questions || []).map((question: any, questionIndex: number) => ({
           ...question,
+          id: question.id || `question-${questionIndex}`,
+          questionText: question.questionText ?? question.text ?? question.question ?? '',
           options: (question.options || []).map((option: any, optionIndex: number) =>
             typeof option === 'string'
               ? {
-                  id: `${question.id || questionIndex}-option-${optionIndex}`,
+                  id: `question-${questionIndex}-option-${optionIndex}`,
                   optionText: option,
                   order: optionIndex,
                 }
               : {
                   ...option,
-                  id: option.id || `${question.id || questionIndex}-option-${optionIndex}`,
-                  optionText: option.optionText ?? option.text ?? '',
+                  id: option.id || `question-${questionIndex}-option-${optionIndex}`,
+                  optionText: option.optionText ?? option.text ?? option.label ?? '',
                   order: option.order ?? optionIndex,
                 },
           ),
