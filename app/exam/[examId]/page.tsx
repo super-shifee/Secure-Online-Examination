@@ -138,6 +138,31 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
     return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getDisplayedOptions = (question: Question) => {
+    const options = question.options ?? [];
+    const hasOnlyChoiceLabels = options.length > 0 && options.every((option, index) =>
+      option.optionText.trim().match(new RegExp(`^${String.fromCharCode(65 + index)}[.)]?$`, 'i'))
+    );
+
+    if (!hasOnlyChoiceLabels) return { questionText: question.questionText, options };
+
+    const embeddedChoices = question.questionText.match(/(?:^|\\s)([A-Z])[.)]\\s*([^,]+?)(?=\\s+[A-Z][.)]\\s|$)/g);
+    if (!embeddedChoices || embeddedChoices.length !== options.length) {
+      return { questionText: question.questionText, options };
+    }
+
+    const choiceTexts = embeddedChoices.map(choice => choice.replace(/^\\s*[A-Z][.)]\\s*/, '').trim());
+    const questionText = question.questionText.slice(0, question.questionText.indexOf(embeddedChoices[0])).trim();
+
+    return {
+      questionText,
+      options: options.map((option, index) => ({
+        ...option,
+        optionText: choiceTexts[index],
+      })),
+    };
+  };
+
   const handleSelectOption = (questionId: string, optionId: string) => {
     setAnswers(prev => {
       const currentAnswers = prev[questionId] || [];
@@ -215,6 +240,7 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
   }
 
   const currentQuestion = exam.questions[currentQuestionIndex];
+  const displayedQuestion = getDisplayedOptions(currentQuestion);
   const timeWarning = timeRemaining < 300; // 5 minutes
 
   return (
@@ -243,7 +269,7 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
             <div className="bg-white rounded-lg shadow p-8">
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                  {currentQuestion.questionText}
+                  {displayedQuestion.questionText}
                 </h2>
                 <p className="text-sm text-gray-600">
                   Marks: <span className="font-semibold">{currentQuestion.marks}</span>
@@ -252,7 +278,7 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
 
               {/* Options */}
               <div className="space-y-3 mb-8">
-                {currentQuestion.options?.map((option, optionIndex) => (
+                {displayedQuestion.options.map((option) => (
                   <label
                     key={option.id}
                     className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition"
@@ -263,9 +289,6 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
                       onChange={() => handleSelectOption(currentQuestion.id, option.id)}
                       className="w-4 h-4 text-blue-600 cursor-pointer"
                     />
-                    <span className="font-semibold text-gray-900" aria-hidden="true">
-                      {String.fromCharCode(65 + optionIndex)})
-                    </span>
                     <span className="text-gray-700">{option.optionText}</span>
                   </label>
                 ))}
