@@ -38,8 +38,9 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [examId, setExamId] = useState<string | null>(null);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [showProctoring, setShowProctoring] = useState(false);
+  const [submissionMessage, setSubmissionMessage] = useState('');
 
   useEffect(() => {
     // Properly unwrap params promise
@@ -128,7 +129,9 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
       });
     }, 1000);
 
-    return () => clearInterval(timerRef.current);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [exam, submitted]);
 
   const formatTime = (seconds: number) => {
@@ -190,39 +193,40 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
     try {
       if (!exam || !examId) return;
 
-      // Calculate score
-      let totalScore = 0;
-      exam.questions.forEach(question => {
-        const studentAnswer = answers[question.id] || [];
-        // For demo: simple scoring - if student selected any option, give marks
-        if (studentAnswer.length > 0) {
-          totalScore += question.marks;
-        }
-      });
+      if (!user?.id) return;
 
-      // Create result object
-      const result = {
-        id: Math.random().toString(36).substr(2, 9),
-        examId: examId,
-        studentId: user?.id,
-        studentName: user?.name,
+      const questions = exam.questions.map((question) => ({
+        ...question,
+        ...getDisplayedOptions(question),
+      }));
+      const totalScore = questions.reduce((score, question) => {
+        const selectedOptionId = answers[question.id]?.[0];
+        const selectedIndex = question.options.findIndex((option) => option.id === selectedOptionId);
+        return score + (selectedIndex >= 0 && selectedIndex === (question as any).correctAnswer ? question.marks : 0);
+      }, 0);
+      const attemptId = `attempt-${crypto.randomUUID()}`;
+      const examRecord = JSON.parse(localStorage.getItem('exams') || '[]').find((item: any) => item.id === examId);
+      const attempt = {
+        attemptId,
+        examId,
+        subjectId: examRecord?.subjectId || examRecord?.course || 'general',
+        subjectName: examRecord?.subjectName || examRecord?.course || examRecord?.department || 'General',
+        examTitle: exam.title,
+        studentId: user.id,
+        studentName: user.name,
         answers,
-        totalScore,
+        score: totalScore,
         totalMarks: exam.totalMarks,
-        timeSpent: exam.duration * 60 - timeRemaining,
+        totalQuestions: exam.questions.length,
         submittedAt: new Date().toISOString(),
-        status: totalScore >= exam.totalMarks * 0.4 ? 'PASSED' : 'FAILED' // Assuming 40% is passing
+        status: 'PENDING',
       };
-
-      // Store result in localStorage
-      const resultsData = localStorage.getItem('exam_results');
-      const results = resultsData ? JSON.parse(resultsData) : [];
-      results.push(result);
-      localStorage.setItem('exam_results', JSON.stringify(results));
+      const attempts = JSON.parse(localStorage.getItem('exam_attempts') || '[]');
+      localStorage.setItem('exam_attempts', JSON.stringify([...attempts, attempt]));
 
       setSubmitted(true);
-      alert(`Exam submitted! Your score: ${totalScore}/${exam.totalMarks}`);
-      router.push('/dashboard');
+      setSubmissionMessage('Exam submitted successfully. Your result will be available when the teacher releases it.');
+      window.setTimeout(() => router.push('/dashboard'), 1200);
     } catch (error) {
       console.error('[v0] Submit error:', error);
       alert('Failed to submit exam. Please try again.');
@@ -244,6 +248,17 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-red-600">Failed to load exam</p>
+      </div>
+    );
+  }
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+        <div className="max-w-lg rounded-lg border border-green-200 bg-white p-8 text-center shadow">
+          <h1 className="text-2xl font-bold text-gray-900">Exam submitted successfully.</h1>
+          <p className="mt-3 text-gray-600">{submissionMessage}</p>
+        </div>
       </div>
     );
   }

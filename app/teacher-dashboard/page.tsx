@@ -35,14 +35,14 @@ interface Exam {
 }
 
 export default function TeacherDashboard() {
-  const { user, isLoading, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [exams, setExams] = useState<Exam[]>([]);
   const [loadingExams, setLoadingExams] = useState(true);
   const [activeTab, setActiveTab] = useState<'exams' | 'results' | 'analytics'>('exams');
 
   useEffect(() => {
-    if (!isLoading && (!user || user.role !== 'TEACHER')) {
+    if (!loading && (!user || user.role !== 'TEACHER')) {
       router.push('/login');
       return;
     }
@@ -72,14 +72,14 @@ export default function TeacherDashboard() {
     };
 
     loadExams();
-  }, [user, isLoading, router]);
+  }, [user, loading, router]);
 
   const handleLogout = async () => {
     await logout();
     router.push('/');
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
