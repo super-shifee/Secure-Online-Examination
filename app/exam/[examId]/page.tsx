@@ -150,7 +150,7 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
       option.optionText.trim().match(new RegExp(`^${String.fromCharCode(65 + index)}[.)]?$`, 'i'))
     );
 
-    if (hasOnlyChoiceLabels && matches.length === 4) {
+    if (matches.length === 4 && (hasOnlyChoiceLabels || options.some((option) => !option.optionText.trim()))) {
       const questionText = question.questionText.slice(0, matches[0].index).trim();
       const extractedOptions = matches.map((match, index) => {
         const textStart = (match.index ?? 0) + match[0].length;
@@ -165,7 +165,7 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
         questionText,
         options: options.map((option, index) => ({
           ...option,
-          optionText: extractedOptions[index],
+          optionText: extractedOptions[index] || option.optionText.replace(/^\s*[A-D][.)]\s*/i, '').trim(),
         })),
       };
     }
