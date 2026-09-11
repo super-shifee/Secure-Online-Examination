@@ -38,8 +38,9 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
   const [examId, setExamId] = useState<string | null>(null);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [showProctoring, setShowProctoring] = useState(false);
+  const [submissionMessage, setSubmissionMessage] = useState('');
 
   useEffect(() => {
     // Properly unwrap params promise
@@ -81,7 +82,25 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
         title: foundExam.title,
         duration: foundExam.duration,
         totalMarks: foundExam.totalMarks,
-        questions: foundExam.questions || [],
+        questions: (foundExam.questions || []).map((question: any, questionIndex: number) => ({
+          ...question,
+          id: question.id || `question-${questionIndex}`,
+          questionText: question.questionText ?? question.text ?? question.question ?? '',
+          options: (question.options || []).map((option: any, optionIndex: number) =>
+            typeof option === 'string'
+              ? {
+                  id: `question-${questionIndex}-option-${optionIndex}`,
+                  optionText: option,
+                  order: optionIndex,
+                }
+              : {
+                  ...option,
+                  id: option.id || `question-${questionIndex}-option-${optionIndex}`,
+                  optionText: option.optionText ?? option.text ?? option.value ?? option.content ?? '',
+                  order: option.order ?? optionIndex,
+                },
+          ).sort((first: { order: number }, second: { order: number }) => first.order - second.order),
+        })),
         randomizeQuestions: foundExam.randomizeQuestions || false,
         requiresProctoring: foundExam.requiresProctoring || false
       };
@@ -110,7 +129,9 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
       });
     }, 1000);
 
-    return () => clearInterval(timerRef.current);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [exam, submitted]);
 
   const formatTime = (seconds: number) => {
@@ -120,57 +141,92 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
     return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSelectOption = (questionId: string, optionId: string) => {
-    setAnswers(prev => {
-      const currentAnswers = prev[questionId] || [];
-      const isSelected = currentAnswers.includes(optionId);
+  const getDisplayedOptions = (question: Question) => {
+    const options = question.options ?? [];
+    const choicePattern = /(?:^|\s)([A-D])[.)]\s*/gi;
+    const matches = [...question.questionText.matchAll(choicePattern)];
+
+    // Some older exams store the question and all four choices in one field,
+    // while the options array only contains A/B/C/D labels. Split that legacy
+    // value before rendering so the prompt and answers stay separate.
+    const hasOnlyChoiceLabels = options.length === 4 && options.every((option, index) =>
+      option.optionText.trim().match(new RegExp(`^${String.fromCharCode(65 + index)}[.)]?$`, 'i'))
+    );
+
+    if (matches.length === 4 && (hasOnlyChoiceLabels || options.some((option) => !option.optionText.trim()))) {
+      const questionText = question.questionText.slice(0, matches[0].index).trim();
+      const extractedOptions = matches.map((match, index) => {
+        const textStart = (match.index ?? 0) + match[0].length;
+        const textEnd = index < matches.length - 1
+          ? matches[index + 1].index ?? question.questionText.length
+          : question.questionText.length;
+
+        return question.questionText.slice(textStart, textEnd).trim();
+      });
 
       return {
-        ...prev,
-        [questionId]: isSelected
-          ? currentAnswers.filter(id => id !== optionId)
-          : [...currentAnswers, optionId]
+        questionText,
+        options: options.map((option, index) => ({
+          ...option,
+          optionText: extractedOptions[index] || option.optionText.replace(/^\s*[A-D][.)]\s*/i, '').trim(),
+        })),
       };
-    });
+    }
+
+    return {
+      questionText: question.questionText,
+      options: options.map((option, index) => ({
+        ...option,
+        optionText: option.optionText.replace(/^\s*[A-D][.)]\s*/i, '').trim(),
+      })),
+    };
+  };
+
+  const handleSelectOption = (questionId: string, optionId: string) => {
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: [optionId],
+    }));
   };
 
   const handleSubmit = async () => {
     try {
       if (!exam || !examId) return;
 
-      // Calculate score
-      let totalScore = 0;
-      exam.questions.forEach(question => {
-        const studentAnswer = answers[question.id] || [];
-        // For demo: simple scoring - if student selected any option, give marks
-        if (studentAnswer.length > 0) {
-          totalScore += question.marks;
-        }
-      });
+      if (!user?.id) return;
 
-      // Create result object
-      const result = {
-        id: Math.random().toString(36).substr(2, 9),
-        examId: examId,
-        studentId: user?.id,
-        studentName: user?.name,
+      const questions = exam.questions.map((question) => ({
+        ...question,
+        ...getDisplayedOptions(question),
+      }));
+      const totalScore = questions.reduce((score, question) => {
+        const selectedOptionId = answers[question.id]?.[0];
+        const selectedIndex = question.options.findIndex((option) => option.id === selectedOptionId);
+        return score + (selectedIndex >= 0 && selectedIndex === (question as any).correctAnswer ? question.marks : 0);
+      }, 0);
+      const attemptId = `attempt-${crypto.randomUUID()}`;
+      const examRecord = JSON.parse(localStorage.getItem('exams') || '[]').find((item: any) => item.id === examId);
+      const attempt = {
+        attemptId,
+        examId,
+        subjectId: examRecord?.subjectId || examRecord?.course || 'general',
+        subjectName: examRecord?.subjectName || examRecord?.course || examRecord?.department || 'General',
+        examTitle: exam.title,
+        studentId: user.id,
+        studentName: user.name,
         answers,
-        totalScore,
+        score: totalScore,
         totalMarks: exam.totalMarks,
-        timeSpent: exam.duration * 60 - timeRemaining,
+        totalQuestions: exam.questions.length,
         submittedAt: new Date().toISOString(),
-        status: totalScore >= exam.totalMarks * 0.4 ? 'PASSED' : 'FAILED' // Assuming 40% is passing
+        status: 'PENDING',
       };
-
-      // Store result in localStorage
-      const resultsData = localStorage.getItem('exam_results');
-      const results = resultsData ? JSON.parse(resultsData) : [];
-      results.push(result);
-      localStorage.setItem('exam_results', JSON.stringify(results));
+      const attempts = JSON.parse(localStorage.getItem('exam_attempts') || '[]');
+      localStorage.setItem('exam_attempts', JSON.stringify([...attempts, attempt]));
 
       setSubmitted(true);
-      alert(`Exam submitted! Your score: ${totalScore}/${exam.totalMarks}`);
-      router.push('/dashboard');
+      setSubmissionMessage('Exam submitted successfully. Your result will be available when the teacher releases it.');
+      window.setTimeout(() => router.push('/dashboard'), 1200);
     } catch (error) {
       console.error('[v0] Submit error:', error);
       alert('Failed to submit exam. Please try again.');
@@ -196,7 +252,19 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
     );
   }
 
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+        <div className="max-w-lg rounded-lg border border-green-200 bg-white p-8 text-center shadow">
+          <h1 className="text-2xl font-bold text-gray-900">Exam submitted successfully.</h1>
+          <p className="mt-3 text-gray-600">{submissionMessage}</p>
+        </div>
+      </div>
+    );
+  }
+
   const currentQuestion = exam.questions[currentQuestionIndex];
+  const displayedQuestion = getDisplayedOptions(currentQuestion);
   const timeWarning = timeRemaining < 300; // 5 minutes
 
   return (
@@ -225,7 +293,7 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
             <div className="bg-white rounded-lg shadow p-8">
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                  {currentQuestion.questionText}
+                  {displayedQuestion.questionText}
                 </h2>
                 <p className="text-sm text-gray-600">
                   Marks: <span className="font-semibold">{currentQuestion.marks}</span>
@@ -234,20 +302,33 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
 
               {/* Options */}
               <div className="space-y-3 mb-8">
-                {currentQuestion.options?.map((option) => (
-                  <label
-                    key={option.id}
-                    className="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={answers[currentQuestion.id]?.includes(option.id) || false}
-                      onChange={() => handleSelectOption(currentQuestion.id, option.id)}
-                      className="w-4 h-4 text-blue-600 cursor-pointer"
-                    />
-                    <span className="ml-3 text-gray-700">{option.optionText}</span>
-                  </label>
-                ))}
+                {displayedQuestion.options.map((option, optionIndex) => {
+                  const isSelected = answers[currentQuestion.id]?.includes(option.id) || false;
+                  const choiceLabel = `${String.fromCharCode(65 + optionIndex)}.`;
+
+                  return (
+                    <label
+                      key={option.id}
+                      className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-200 hover:bg-blue-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`question-${currentQuestion.id}`}
+                        checked={isSelected}
+                        onChange={() => handleSelectOption(currentQuestion.id, option.id)}
+                        className="mt-1 w-4 h-4 text-blue-600 cursor-pointer"
+                      />
+                      <span className="text-gray-700 leading-relaxed">
+                        <span className="font-semibold text-gray-900">{choiceLabel}</span>{' '}
+                        {option.optionText}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
 
               {/* Navigation */}

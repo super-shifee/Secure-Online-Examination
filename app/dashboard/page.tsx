@@ -23,24 +23,27 @@ interface Exam {
   status?: 'upcoming' | 'ongoing' | 'completed';
 }
 
-interface Result {
-  id: string;
+interface Attempt {
+  attemptId: string;
   examId: string;
-  exam: Exam;
-  marksObtained: number;
+  subjectId: string;
+  subjectName: string;
+  examTitle: string;
+  studentId: string;
+  score: number;
   totalMarks: number;
-  percentage: number;
-  isPassed: boolean;
-  resultDate: string;
+  totalQuestions: number;
+  submittedAt: string;
+  status: 'PENDING' | 'RELEASED';
 }
 
 export default function DashboardPage() {
   const { user, token, logout } = useAuth();
   const router = useRouter();
   const [exams, setExams] = useState<Exam[]>([]);
-  const [results, setResults] = useState<Result[]>([]);
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'exams' | 'results'>('exams');
+  const [activeTab, setActiveTab] = useState<'exams' | 'attempts'>('exams');
 
   useEffect(() => {
     if (!user || !token) {
@@ -73,10 +76,9 @@ export default function DashboardPage() {
       
       setExams(transformedExams);
 
-      // Load results from localStorage
-      const resultsData = localStorage.getItem('exam_results');
-      const parsedResults = resultsData ? JSON.parse(resultsData) : [];
-      setResults(parsedResults);
+      const attemptsData = localStorage.getItem('exam_attempts');
+      const parsedAttempts = attemptsData ? JSON.parse(attemptsData) : [];
+      setAttempts(parsedAttempts.filter((attempt: Attempt) => attempt.studentId === user?.id && attempt.status === 'RELEASED'));
     } catch (error) {
       console.error('[v0] Fetch error:', error);
     } finally {
@@ -91,8 +93,8 @@ export default function DashboardPage() {
     const now = new Date();
 
     // Check if student has already taken this exam
-    const studentResults = results.filter(r => r.examId === exam.id);
-    if (studentResults.length > 0) return 'completed';
+    const studentAttempts = attempts.filter((attempt) => attempt.examId === exam.id);
+    if (studentAttempts.length > 0) return 'completed';
 
     if (now < startTime) return 'upcoming';
     if (now > endTime) return 'completed';
@@ -100,7 +102,7 @@ export default function DashboardPage() {
   };
 
   const hasStudentTakenExam = (examId: string) => {
-    return results.some(r => r.examId === examId);
+    return attempts.some(r => r.examId === examId);
   };
 
   const getStatusColor = (status: string) => {
@@ -154,16 +156,16 @@ export default function DashboardPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-gray-600 text-sm font-medium">Exams Completed</p>
             <p className="text-4xl font-bold text-gray-900 mt-2">
-              {results.length}
+              {attempts.length}
             </p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-gray-600 text-sm font-medium">Average Score</p>
             <p className="text-4xl font-bold text-gray-900 mt-2">
-              {results.length > 0
-                ? (results.reduce((sum, r) => sum + r.percentage, 0) / results.length).toFixed(1)
+              {attempts.length > 0
+                ? (attempts.reduce((sum, attempt) => sum + (attempt.score / attempt.totalMarks) * 100, 0) / attempts.length).toFixed(1)
                 : 'N/A'}
-              {results.length > 0 && <span className="text-lg">%</span>}
+              {attempts.length > 0 && <span className="text-lg">%</span>}
             </p>
           </div>
         </div>
@@ -182,9 +184,9 @@ export default function DashboardPage() {
               Available Exams
             </button>
             <button
-              onClick={() => setActiveTab('results')}
+              onClick={() => setActiveTab('attempts')}
               className={`px-6 py-4 font-semibold ${
-                activeTab === 'results'
+                activeTab === 'attempts'
                   ? 'border-b-2 border-blue-600 text-blue-600'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
@@ -268,8 +270,8 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {results.length === 0 ? (
-                  <p className="text-gray-600">No results yet</p>
+                {attempts.length === 0 ? (
+                  <p className="text-gray-600">No attempts yet</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full">
@@ -283,33 +285,28 @@ export default function DashboardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {results.map(result => (
-                          <tr key={result.id} className="border-b border-gray-200 hover:bg-gray-50">
-                            <td className="py-4 px-4">{result.exam.title}</td>
-                            <td className="py-4 px-4 font-semibold">
-                              {result.marksObtained}/{result.totalMarks}
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className={`font-semibold ${
-                                result.percentage >= 60 ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                                {result.percentage.toFixed(2)}%
-                              </span>
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
-                                result.isPassed
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {result.isPassed ? 'Passed' : 'Failed'}
-                              </span>
-                            </td>
-                            <td className="py-4 px-4 text-sm text-gray-600">
-                              {new Date(result.resultDate).toLocaleDateString()}
-                            </td>
-                          </tr>
-                        ))}
+                        {attempts.map((attempt) => {
+                          const percentage = (attempt.score / attempt.totalMarks) * 100;
+                          return (
+                            <tr key={attempt.attemptId} className="border-b border-gray-200 hover:bg-gray-50">
+                              <td className="py-4 px-4">{attempt.examTitle}</td>
+                              <td className="py-4 px-4 font-semibold">{attempt.score}/{attempt.totalMarks}</td>
+                              <td className="py-4 px-4">
+                                <span className={`font-semibold ${percentage >= 60 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {percentage.toFixed(2)}%
+                                </span>
+                              </td>
+                              <td className="py-4 px-4">
+                                <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${percentage >= 40 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {percentage >= 40 ? 'Passed' : 'Failed'}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 text-sm text-gray-600">
+                                {new Date(attempt.submittedAt).toLocaleDateString()}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
