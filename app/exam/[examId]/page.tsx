@@ -140,7 +140,7 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
 
   const getDisplayedOptions = (question: Question) => {
     const options = question.options ?? [];
-    const choicePattern = /(?:^|\\s)([A-D])[.)]\\s*/gi;
+    const choicePattern = /(?:^|\s)([A-D])[.)]\s*/gi;
     const matches = [...question.questionText.matchAll(choicePattern)];
 
     // Some older exams store the question and all four choices in one field,
@@ -174,7 +174,7 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
       questionText: question.questionText,
       options: options.map((option, index) => ({
         ...option,
-        optionText: option.optionText.replace(/^\\s*[A-D][.)]\\s*/i, '').trim(),
+        optionText: option.optionText.replace(/^\s*[A-D][.)]\s*/i, '').trim(),
       })),
     };
   };
