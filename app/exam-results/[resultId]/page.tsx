@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/authContext';
@@ -11,21 +11,21 @@ export default function ExamResultsPage({ params }: { params: { resultId: string
   const router = useRouter();
 
   // Mock exam result data
-  const mockResult = {
+  const fallbackResult = {
     id: params.resultId,
-    examName: 'Mathematics Final Exam',
-    studentName: user?.name || 'John Student',
-    studentEmail: user?.email || 'student@example.com',
-    totalScore: 78,
-    maxScore: 100,
-    percentage: 78,
-    status: 'PASSED',
-    completedAt: new Date().toLocaleDateString(),
-    duration: '1h 45m',
-    totalQuestions: 30,
-    correctAnswers: 23,
-    wrongAnswers: 5,
-    unanswered: 2,
+    examName: 'Result not found',
+    studentName: user?.name || 'Student',
+    studentEmail: user?.email || '',
+    totalScore: 0,
+    maxScore: 0,
+    percentage: 0,
+    status: 'PENDING',
+    completedAt: '',
+    duration: '',
+    totalQuestions: 0,
+    correctAnswers: 0,
+    wrongAnswers: 0,
+    unanswered: 0,
     questions: [
       {
         id: 1,
@@ -81,6 +81,34 @@ export default function ExamResultsPage({ params }: { params: { resultId: string
   };
 
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
+  const [storedResult, setStoredResult] = useState<typeof displayedResult | null>(null);
+
+  useEffect(() => {
+    const attempts = JSON.parse(localStorage.getItem('exam_attempts') || '[]');
+    const attempt = attempts.find((item: any) => item.attemptId === params.resultId);
+    if (!attempt) return;
+
+    const percentage = attempt.totalMarks > 0 ? Math.round((attempt.score / attempt.totalMarks) * 100) : 0;
+    setStoredResult({
+      ...fallbackResult,
+      id: attempt.attemptId,
+      examName: attempt.examTitle,
+      studentName: attempt.studentName || user?.name || 'Student',
+      studentEmail: user?.email || 'student@example.com',
+      totalScore: attempt.score,
+      maxScore: attempt.totalMarks,
+      percentage,
+      status: attempt.status,
+      completedAt: new Date(attempt.submittedAt).toLocaleDateString(),
+      totalQuestions: attempt.totalQuestions || 0,
+      correctAnswers: 0,
+      wrongAnswers: 0,
+      unanswered: 0,
+      questions: [],
+    });
+  }, [params.resultId, user]);
+
+  const displayedResult = storedResult || fallbackResult;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -108,7 +136,7 @@ export default function ExamResultsPage({ params }: { params: { resultId: string
         <div className="max-w-4xl mx-auto px-6 py-6 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Exam Results</h1>
-            <p className="text-gray-600 mt-1">{mockResult.examName}</p>
+            <p className="text-gray-600 mt-1">{displayedResult.examName}</p>
           </div>
           <Link href="/dashboard">
             <Button variant="outline">Back to Dashboard</Button>
@@ -125,12 +153,12 @@ export default function ExamResultsPage({ params }: { params: { resultId: string
             <div className="flex flex-col items-center justify-center">
               <div className="relative w-48 h-48 rounded-full bg-gradient-to-br from-blue-100 to-blue-50 border-8 border-blue-200 flex items-center justify-center">
                 <div className="text-center">
-                  <p className="text-5xl font-bold text-blue-600">{mockResult.percentage}</p>
+                  <p className="text-5xl font-bold text-blue-600">{displayedResult.percentage}</p>
                   <p className="text-gray-600 mt-2">%</p>
                 </div>
               </div>
-              <div className={`mt-6 px-6 py-3 rounded-lg border ${getStatusColor(mockResult.status)}`}>
-                <p className="font-semibold text-lg">{mockResult.status}</p>
+              <div className={`mt-6 px-6 py-3 rounded-lg border ${getStatusColor(displayedResult.status)}`}>
+                <p className="font-semibold text-lg">{displayedResult.status}</p>
               </div>
             </div>
 
@@ -139,29 +167,29 @@ export default function ExamResultsPage({ params }: { params: { resultId: string
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <p className="text-gray-600 text-sm">Total Score</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {mockResult.totalScore}/{mockResult.maxScore}
+                  {displayedResult.totalScore}/{displayedResult.maxScore}
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <p className="text-green-700 text-sm font-medium">Correct</p>
-                  <p className="text-2xl font-bold text-green-600">{mockResult.correctAnswers}</p>
+                  <p className="text-2xl font-bold text-green-600">{displayedResult.correctAnswers}</p>
                 </div>
                 <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                   <p className="text-red-700 text-sm font-medium">Wrong</p>
-                  <p className="text-2xl font-bold text-red-600">{mockResult.wrongAnswers}</p>
+                  <p className="text-2xl font-bold text-red-600">{displayedResult.wrongAnswers}</p>
                 </div>
               </div>
 
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <p className="text-gray-600 text-sm">Duration</p>
-                <p className="text-xl font-bold text-gray-900">{mockResult.duration}</p>
+                <p className="text-xl font-bold text-gray-900">{displayedResult.duration}</p>
               </div>
 
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <p className="text-gray-600 text-sm">Completed On</p>
-                <p className="text-lg font-semibold text-gray-900">{mockResult.completedAt}</p>
+                <p className="text-lg font-semibold text-gray-900">{displayedResult.completedAt}</p>
               </div>
             </div>
           </div>
@@ -172,13 +200,13 @@ export default function ExamResultsPage({ params }: { params: { resultId: string
             <div className="w-full bg-gray-200 rounded-full h-3">
               <div
                 className={`h-3 rounded-full transition-all duration-300 ${
-                  mockResult.percentage >= 70 ? 'bg-green-500' : 'bg-yellow-500'
+                  displayedResult.percentage >= 70 ? 'bg-green-500' : 'bg-yellow-500'
                 }`}
-                style={{ width: `${mockResult.percentage}%` }}
+                style={{ width: `${displayedResult.percentage}%` }}
               />
             </div>
             <p className="text-gray-600 text-xs mt-2">
-              {mockResult.correctAnswers} out of {mockResult.totalQuestions} questions answered correctly
+              {displayedResult.correctAnswers} out of {displayedResult.totalQuestions} questions answered correctly
             </p>
           </div>
         </div>
@@ -193,7 +221,7 @@ export default function ExamResultsPage({ params }: { params: { resultId: string
           </div>
 
           <div className="divide-y divide-gray-200">
-            {mockResult.questions.map((question, index) => (
+            {displayedResult.questions.map((question, index) => (
               <div key={question.id} className="border-b border-gray-200 last:border-b-0">
                 <button
                   onClick={() =>

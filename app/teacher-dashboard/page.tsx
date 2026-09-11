@@ -34,10 +34,25 @@ interface Exam {
   averageScore?: number;
 }
 
+interface Submission {
+  attemptId: string;
+  examId: string;
+  subjectId?: string;
+  subjectName?: string;
+  examTitle: string;
+  studentId: string;
+  studentName?: string;
+  score: number;
+  totalMarks: number;
+  submittedAt: string;
+  status: 'PENDING' | 'RELEASED';
+}
+
 export default function TeacherDashboard() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [exams, setExams] = useState<Exam[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loadingExams, setLoadingExams] = useState(true);
   const [activeTab, setActiveTab] = useState<'exams' | 'results' | 'analytics'>('exams');
 
@@ -63,6 +78,11 @@ export default function TeacherDashboard() {
         }));
         
         setExams(formattedExams);
+        const storedSubmissions = localStorage.getItem('exam_attempts');
+        const parsedSubmissions = storedSubmissions ? JSON.parse(storedSubmissions) : [];
+        setSubmissions(parsedSubmissions.filter((submission: Submission) =>
+          formattedExams.some((exam: Exam) => exam.id === submission.examId)
+        ));
       } catch (error) {
         console.error('[v0] Error loading exams:', error);
         setExams([]);
@@ -240,25 +260,34 @@ export default function TeacherDashboard() {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">Student Results</h3>
                 <div className="space-y-4">
-                  {exams.map((exam) => (
-                    <div key={exam.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{exam.title}</h4>
-                          <p className="text-sm text-gray-600">
-                            {exam.completedStudents} of {exam.totalStudents} students completed
-                          </p>
+                  {submissions.length === 0 ? (
+                    <p className="text-gray-600">No student submissions yet.</p>
+                  ) : (
+                    submissions.map((submission) => (
+                      <div key={submission.attemptId} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <h4 className="font-semibold text-gray-900">{submission.examTitle}</h4>
+                            <p className="text-sm text-gray-600">
+                              Student: {submission.studentName || submission.studentId}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {submission.subjectName || 'General'} · Attempt {submission.attemptId}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <p className="text-xl font-bold text-blue-600">{submission.score}/{submission.totalMarks}</p>
+                              <p className="text-sm text-gray-600">{submission.status}</p>
+                            </div>
+                            <Link href={`/exam-results/${submission.attemptId}`}>
+                              <Button className="bg-blue-600 hover:bg-blue-700">View Result</Button>
+                            </Link>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-blue-600">{exam.averageScore}%</p>
-                          <p className="text-sm text-gray-600">Average Score</p>
-                        </div>
-                        <Link href={`/exam-results/${exam.id}`}>
-                          <Button className="bg-blue-600 hover:bg-blue-700">View Details</Button>
-                        </Link>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             )}
