@@ -140,41 +140,50 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
 
   const getDisplayedOptions = (question: Question) => {
     const options = question.options ?? [];
-    const hasOnlyChoiceLabels = options.length > 0 && options.every((option, index) =>
+    const choicePattern = /(?:^|\\s)([A-D])[.)]\\s*/gi;
+    const matches = [...question.questionText.matchAll(choicePattern)];
+
+    // Some older exams store the question and all four choices in one field,
+    // while the options array only contains A/B/C/D labels. Split that legacy
+    // value before rendering so the prompt and answers stay separate.
+    const hasOnlyChoiceLabels = options.length === 4 && options.every((option, index) =>
       option.optionText.trim().match(new RegExp(`^${String.fromCharCode(65 + index)}[.)]?$`, 'i'))
     );
 
-    if (!hasOnlyChoiceLabels) return { questionText: question.questionText, options };
+    if (hasOnlyChoiceLabels && matches.length === 4) {
+      const questionText = question.questionText.slice(0, matches[0].index).trim();
+      const extractedOptions = matches.map((match, index) => {
+        const textStart = (match.index ?? 0) + match[0].length;
+        const textEnd = index < matches.length - 1
+          ? matches[index + 1].index ?? question.questionText.length
+          : question.questionText.length;
 
-    const embeddedChoices = question.questionText.match(/(?:^|\\s)([A-Z])[.)]\\s*([^,]+?)(?=\\s+[A-Z][.)]\\s|$)/g);
-    if (!embeddedChoices || embeddedChoices.length !== options.length) {
-      return { questionText: question.questionText, options };
+        return question.questionText.slice(textStart, textEnd).trim();
+      });
+
+      return {
+        questionText,
+        options: options.map((option, index) => ({
+          ...option,
+          optionText: extractedOptions[index],
+        })),
+      };
     }
 
-    const choiceTexts = embeddedChoices.map(choice => choice.replace(/^\\s*[A-Z][.)]\\s*/, '').trim());
-    const questionText = question.questionText.slice(0, question.questionText.indexOf(embeddedChoices[0])).trim();
-
     return {
-      questionText,
+      questionText: question.questionText,
       options: options.map((option, index) => ({
         ...option,
-        optionText: choiceTexts[index],
+        optionText: option.optionText.replace(/^\\s*[A-D][.)]\\s*/i, '').trim(),
       })),
     };
   };
 
   const handleSelectOption = (questionId: string, optionId: string) => {
-    setAnswers(prev => {
-      const currentAnswers = prev[questionId] || [];
-      const isSelected = currentAnswers.includes(optionId);
-
-      return {
-        ...prev,
-        [questionId]: isSelected
-          ? currentAnswers.filter(id => id !== optionId)
-          : [...currentAnswers, optionId]
-      };
-    });
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: [optionId],
+    }));
   };
 
   const handleSubmit = async () => {
@@ -278,20 +287,33 @@ export default function ExamPage({ params }: { params: Promise<{ examId: string 
 
               {/* Options */}
               <div className="space-y-3 mb-8">
-                {displayedQuestion.options.map((option) => (
-                  <label
-                    key={option.id}
-                    className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 transition"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={answers[currentQuestion.id]?.includes(option.id) || false}
-                      onChange={() => handleSelectOption(currentQuestion.id, option.id)}
-                      className="w-4 h-4 text-blue-600 cursor-pointer"
-                    />
-                    <span className="text-gray-700">{option.optionText}</span>
-                  </label>
-                ))}
+                {displayedQuestion.options.map((option, optionIndex) => {
+                  const isSelected = answers[currentQuestion.id]?.includes(option.id) || false;
+                  const choiceLabel = `${String.fromCharCode(65 + optionIndex)}.`;
+
+                  return (
+                    <label
+                      key={option.id}
+                      className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-200 hover:bg-blue-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`question-${currentQuestion.id}`}
+                        checked={isSelected}
+                        onChange={() => handleSelectOption(currentQuestion.id, option.id)}
+                        className="mt-1 w-4 h-4 text-blue-600 cursor-pointer"
+                      />
+                      <span className="text-gray-700 leading-relaxed">
+                        <span className="font-semibold text-gray-900">{choiceLabel}</span>{' '}
+                        {option.optionText}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
 
               {/* Navigation */}
